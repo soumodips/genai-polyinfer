@@ -59,8 +59,12 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "bugs": {
-    "url": "https://github.com/genai-polyinfer/genai-polyinfer/issues"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/soumodips/genai-polyinfer"
   },
-  "homepage": "https://github.com/genai-polyinfer/genai-polyinfer"
+  "bugs": {
+    "url": "https://github.com/soumodips/genai-polyinfer/issues"
+  },
+  "homepage": "https://github.com/soumodips/genai-polyinfer?tab=readme-ov-file#genai-polyinfer"
 }
