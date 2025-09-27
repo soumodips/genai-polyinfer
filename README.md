@@ -137,6 +137,7 @@ The config supports:
 - **metrics**: Track success/failure rates
 - **cache**: In-memory caching with TTL
 - **Note**: API key fallback strategies are now configured per-provider (see Provider Configuration below)
+- **Provider Order**: The order of tries follows the order of entries in the providers array in polyinfer.config.ts
 
 ### Provider Configuration
 
@@ -156,6 +157,28 @@ Each provider supports:
 - **api_key_fallback_subset_count**: When strategy is "subset", number of random keys to try
 - **api_key_fallback_subset_from**: When strategy is "subset", try random keys from the first N available keys
 - **responsePath**: Path to extract text from the response (e.g., 'choices[0].message.content')
+
+## Provider Ordering
+
+The library processes providers in the exact order they appear in the `providers` array in `polyinfer.config.ts`. This ordering affects:
+
+- **Sequential Mode**: Providers are tried in array order until one succeeds
+- **Concurrent Mode**: All providers execute simultaneously, and fastest successful response is returned
+- **Consecutive Success Switching**: Provider switching follows the array sequence
+- **Best Practice**: Place your most reliable or preferred providers first in the array
+
+### Example Provider Ordering
+
+```typescript
+export default {
+  providers: [
+    { name: 'fast-provider', ... },    // Tried first (most preferred)
+    { name: 'reliable-provider', ... }, // Tried second
+    { name: 'backup-provider', ... },   // Tried third (fallback)
+  ],
+  // ...
+};
+```
 
 ## Local Model Support
 
