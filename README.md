@@ -1,6 +1,6 @@
 # genai-polyinfer
 
-genai-polyinfer is a TypeScript library for orchestrating multiple GenAI providers via HTTP requests (no provider SDKs). It tries providers sequentially or concurrently, caches responses, tracks metrics, and logs operations.
+genai-polyinfer is a TypeScript library for orchestrating multiple GenAI providers via HTTP requests (no provider SDKs). It tries providers sequentially or concurrently, caches responses, tracks metrics, and logs operations. **Configurable API key fallback** - when multiple API keys are configured, you can control whether to try all keys, just the first key, or a specified number of keys. **Local model support** - when no API keys are configured, it automatically attempts requests without authentication for local model servers.
 
 ## Install
 
@@ -55,7 +55,8 @@ export default {
         model: '{model}',
         messages: [{ role: 'user', content: '{input}' }],
       }),
-      api_key_from_env: ['OPENAI_API_KEY'],
+      api_key_from_env: ['OPENAI_API_KEY'], // Can specify multiple keys for fallback
+      // Example with multiple keys: ['OPENAI_API_KEY', 'OPENAI_API_KEY_BACKUP']
       responsePath: 'choices[0].message.content',
     },
     {
@@ -117,6 +118,41 @@ The config supports:
 - **logging**: Enable console logging
 - **metrics**: Track success/failure rates
 - **cache**: In-memory caching with TTL
+- **api_key_fallback_strategy**: How to handle multiple API keys per provider - "all" (try all until one succeeds), "first" (only try first available key), or "count" (try specified number of keys)
+- **api_key_fallback_count**: When strategy is "count", specifies how many keys to try (default: 2)
+
+### Provider Configuration
+
+Each provider supports:
+
+- **name**: Unique identifier for the provider
+- **api_url**: The HTTP endpoint for API requests
+- **model**: Model name to use (substituted in request_structure)
+- **request_structure**: JSON template for the request body
+- **api_key_from_env**: Array of environment variable names containing API keys. Supports multiple keys with configurable fallback behavior - the `api_key_fallback_strategy` config option controls whether to try all keys, just the first key, or a specified number of keys
+- **responsePath**: Path to extract text from the response (e.g., 'choices[0].message.content')
+
+## Local Model Support
+
+When a provider has no API keys configured (`api_key_from_env: []`), the library automatically enables local model support:
+
+1. **First attempt**: Tries the request without any API key (for local model servers)
+2. **Fallback**: Only if the no-API-key attempt fails, logs "No api key but required" and throws an error
+
+This enables seamless integration with local model servers like Ollama, LM Studio, or other local inference servers that don't require authentication.
+
+### Example Local Model Configuration
+
+```ts
+{
+  name: 'ollama',
+  api_url: 'http://localhost:11434/api/generate',
+  model: 'llama2',
+  request_structure: JSON.stringify({ model: '{model}', prompt: '{input}' }),
+  api_key_from_env: [], // Empty array enables local model support
+  responsePath: 'response',
+},
+```
 
 ## Notes
 

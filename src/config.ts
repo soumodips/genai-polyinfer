@@ -19,6 +19,8 @@ export const ConfigSchema = z.object({
   cache: z
     .object({ enabled: z.boolean(), ttl: z.number() })
     .default({ enabled: true, ttl: 600000 }),
+  api_key_fallback_strategy: z.enum(['all', 'first', 'count']).default('all'),
+  api_key_fallback_count: z.number().default(2),
 });
 
 export type Provider = z.infer<typeof ProviderSchema>;
