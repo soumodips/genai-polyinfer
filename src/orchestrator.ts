@@ -215,11 +215,25 @@ export class Orchestrator {
     const bodyStr = buildBody(provider, input);
     const headers: Record<string, string> = {
       'content-type': 'application/json',
+      // Add custom headers from provider configuration
+      ...(provider.request_header || {}),
     };
 
-    // Only add authorization header if API key is provided
+    // If API key is provided, intelligently replace {api_key} placeholders in headers
     if (apiKey) {
-      headers.authorization = `Bearer ${apiKey}`;
+      // First, check if any header contains the {api_key} placeholder
+      let placeholderFound = false;
+      for (const [key, value] of Object.entries(headers)) {
+        if (typeof value === 'string' && value === '{api_key}') {
+          headers[key] = apiKey;
+          placeholderFound = true;
+        }
+      }
+
+      // If no placeholder found and no custom authorization header is set, add default Bearer token
+      if (!placeholderFound && !headers.authorization) {
+        headers.authorization = `Bearer ${apiKey}`;
+      }
     }
 
     const start = Date.now();
