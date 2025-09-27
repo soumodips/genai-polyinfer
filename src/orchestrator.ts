@@ -92,7 +92,16 @@ export class Orchestrator {
   }
 
   private async tryProvider(input: string, provider: Provider): Promise<Result> {
-    const { logging, metrics, api_key_fallback_strategy, api_key_fallback_count } = this.config;
+    const { logging, metrics } = this.config;
+    const {
+      api_key_fallback_strategy,
+      api_key_fallback_count,
+      api_key_fallback_indices,
+      api_key_fallback_range_start,
+      api_key_fallback_range_end,
+      api_key_fallback_subset_count,
+      api_key_fallback_subset_from
+    } = provider;
 
     if (logging) log(`Trying provider: ${provider.name}`);
 
@@ -105,32 +114,66 @@ export class Orchestrator {
       }
     }
 
-    // If API keys are available, try with them first using existing logic
+    // If API keys are available, try with them first using provider-specific logic
     if (availableApiKeys.length > 0) {
-      // Determine how many keys to try based on strategy
-      let keysToTry: string[];
+      // Determine which keys to try based on provider's fallback strategy
+      let keysToTry: string[] = [];
+
       switch (api_key_fallback_strategy) {
         case 'first':
           keysToTry = availableApiKeys.slice(0, 1);
           break;
+        case 'all':
+          keysToTry = availableApiKeys;
+          break;
         case 'count':
           keysToTry = availableApiKeys.slice(0, api_key_fallback_count);
           break;
-        case 'all':
-        default:
-          keysToTry = availableApiKeys;
+        case 'indices':
+          if (api_key_fallback_indices && api_key_fallback_indices.length > 0) {
+            keysToTry = api_key_fallback_indices
+              .filter(index => index >= 0 && index < availableApiKeys.length)
+              .map(index => availableApiKeys[index])
+              .filter(key => key !== undefined) as string[];
+          } else {
+            keysToTry = [availableApiKeys[0]]; // fallback to first key if no valid indices
+          }
           break;
+        case 'range':
+          if (api_key_fallback_range_start !== undefined && api_key_fallback_range_end !== undefined) {
+            const start = Math.max(0, api_key_fallback_range_start);
+            const end = Math.min(availableApiKeys.length, api_key_fallback_range_end + 1);
+            keysToTry = availableApiKeys.slice(start, end);
+          } else {
+            keysToTry = [availableApiKeys[0]]; // fallback to first key if range not properly defined
+          }
+          break;
+        case 'subset':
+          if (api_key_fallback_subset_count && api_key_fallback_subset_from !== undefined) {
+            const subsetSize = Math.min(api_key_fallback_subset_count, availableApiKeys.length);
+            const fromIndex = Math.min(api_key_fallback_subset_from, availableApiKeys.length);
+            const subsetPool = availableApiKeys.slice(0, fromIndex);
+
+            // Randomly select keys from the subset pool
+            const shuffled = [...subsetPool].sort(() => 0.5 - Math.random());
+            keysToTry = shuffled.slice(0, subsetSize);
+          } else {
+            keysToTry = [availableApiKeys[0]]; // fallback to first key if subset not properly defined
+          }
+          break;
+        default:
+          keysToTry = [availableApiKeys[0]]; // fallback to first key
       }
 
       if (logging && api_key_fallback_strategy !== 'all') {
-        log(`API key fallback strategy: ${api_key_fallback_strategy}, trying ${keysToTry.length} of ${availableApiKeys.length} keys`);
+        log(`Provider ${provider.name} fallback strategy: ${api_key_fallback_strategy}, trying ${keysToTry.length} of ${availableApiKeys.length} keys`);
       }
 
       // Try each API key until one succeeds
       for (let i = 0; i < keysToTry.length; i++) {
         const apiKey = keysToTry[i];
         const keyNumber = availableApiKeys.indexOf(apiKey) + 1;
-        const totalKeys = api_key_fallback_strategy === 'all' ? availableApiKeys.length : keysToTry.length;
+        const totalKeys = keysToTry.length;
 
         if (logging) log(`Trying API key ${keyNumber}/${totalKeys} for ${provider.name}`);
 
@@ -146,9 +189,7 @@ export class Orchestrator {
       }
 
       // All configured API keys failed
-      const strategyInfo = api_key_fallback_strategy === 'all'
-        ? `All ${availableApiKeys.length} API keys failed`
-        : `${keysToTry.length} of ${availableApiKeys.length} API keys failed (strategy: ${api_key_fallback_strategy})`;
+      const strategyInfo = `${keysToTry.length} of ${availableApiKeys.length} API keys failed (strategy: ${api_key_fallback_strategy})`;
 
       if (logging) log(`${strategyInfo} for ${provider.name}`);
       if (metrics) recordFailure(provider.name, 0);

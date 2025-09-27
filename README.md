@@ -118,8 +118,7 @@ The config supports:
 - **logging**: Enable console logging
 - **metrics**: Track success/failure rates
 - **cache**: In-memory caching with TTL
-- **api_key_fallback_strategy**: How to handle multiple API keys per provider - "all" (try all until one succeeds), "first" (only try first available key), or "count" (try specified number of keys)
-- **api_key_fallback_count**: When strategy is "count", specifies how many keys to try (default: 2)
+- **Note**: API key fallback strategies are now configured per-provider (see Provider Configuration below)
 
 ### Provider Configuration
 
@@ -129,7 +128,14 @@ Each provider supports:
 - **api_url**: The HTTP endpoint for API requests
 - **model**: Model name to use (substituted in request_structure)
 - **request_structure**: JSON template for the request body
-- **api_key_from_env**: Array of environment variable names containing API keys. Supports multiple keys with configurable fallback behavior - the `api_key_fallback_strategy` config option controls whether to try all keys, just the first key, or a specified number of keys
+- **api_key_from_env**: Array of environment variable names containing API keys. Supports multiple keys with per-provider fallback strategies
+- **api_key_fallback_strategy**: How to handle multiple API keys for this provider - "first" (default, try first available key), "all" (try all until one succeeds), "count" (try specified number of keys), "indices" (try specific key indices), "range" (try keys in a range), or "subset" (try random subset)
+- **api_key_fallback_count**: When strategy is "count", specifies how many keys to try (default: 2)
+- **api_key_fallback_indices**: When strategy is "indices", array of key indices to try (e.g., [0, 2, 4] for 1st, 3rd, 5th keys)
+- **api_key_fallback_range_start**: When strategy is "range", starting index for the range (inclusive)
+- **api_key_fallback_range_end**: When strategy is "range", ending index for the range (inclusive)
+- **api_key_fallback_subset_count**: When strategy is "subset", number of random keys to try
+- **api_key_fallback_subset_from**: When strategy is "subset", try random keys from the first N available keys
 - **responsePath**: Path to extract text from the response (e.g., 'choices[0].message.content')
 
 ## Local Model Support
@@ -153,6 +159,83 @@ This enables seamless integration with local model servers like Ollama, LM Studi
   responsePath: 'response',
 },
 ```
+
+## Per-Provider API Key Fallback Strategies
+
+Each provider can now have its own API key fallback strategy, giving you fine-grained control over how each provider handles multiple API keys.
+
+### Available Strategies
+
+1. **'first' (default)** - Only try the first available API key
+   ```ts
+   api_key_fallback_strategy: 'first'
+   ```
+
+2. **'all'** - Try all available API keys until one succeeds
+   ```ts
+   api_key_fallback_strategy: 'all'
+   ```
+
+3. **'count'** - Try the first N keys (specify N with `api_key_fallback_count`)
+   ```ts
+   api_key_fallback_strategy: 'count',
+   api_key_fallback_count: 2
+   ```
+
+4. **'indices'** - Try specific key indices (e.g., 1st, 3rd, 5th keys)
+   ```ts
+   api_key_fallback_strategy: 'indices',
+   api_key_fallback_indices: [0, 2, 4] // 1st, 3rd, 5th keys
+   ```
+
+5. **'range'** - Try keys in a specific range (e.g., keys 3-5)
+   ```ts
+   api_key_fallback_strategy: 'range',
+   api_key_fallback_range_start: 2, // Start from 3rd key (index 2)
+   api_key_fallback_range_end: 4    // End at 5th key (index 4)
+   ```
+
+6. **'subset'** - Try a random subset from the first N keys
+   ```ts
+   api_key_fallback_strategy: 'subset',
+   api_key_fallback_subset_count: 3,  // Try 3 random keys
+   api_key_fallback_subset_from: 5    // From the first 5 available keys
+   ```
+
+### Example Configuration
+
+```ts
+{
+  name: 'openai',
+  api_url: 'https://api.openai.com/v1/chat/completions',
+  model: 'gpt-4o-mini',
+  request_structure: JSON.stringify({
+    model: '{model}',
+    messages: [{ role: 'user', content: '{input}' }],
+  }),
+  api_key_from_env: ['OPENAI_API_KEY', 'OPENAI_API_KEY_BACKUP'],
+  api_key_fallback_strategy: 'first', // Only try first key
+  responsePath: 'choices[0].message.content',
+},
+{
+  name: 'gemini',
+  api_url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-exp:generateContent',
+  model: 'gemini-2.5-flash',
+  request_structure: JSON.stringify({
+    contents: [{ parts: [{ text: '{input}' }] }],
+  }),
+  api_key_from_env: ['GOOGLE_API_KEY_1', 'GOOGLE_API_KEY_2', 'GOOGLE_API_KEY_3', 'GOOGLE_API_KEY_4', 'GOOGLE_API_KEY_5'],
+  api_key_fallback_strategy: 'indices',
+  api_key_fallback_indices: [0, 2, 4], // Try 1st, 3rd, 5th keys
+  responsePath: 'candidates[0].content.parts[0].text',
+}
+```
+
+This flexibility allows you to:
+- Use different strategies for different providers based on their reliability
+- Skip problematic keys by using specific indices
+- Distribute load across multiple keys using random subsets
+- Fine-tune fallback behavior for each provider's requirements
 
 ## Notes
 
