@@ -11,6 +11,8 @@ describe('Config Module', () => {
         request_structure: '{"model":"{model}","messages":[{"role":"user","content":"{input}"}]}',
         api_key_from_env: ['OPENAI_API_KEY'],
         responsePath: 'choices[0].message.content',
+        api_key_fallback_strategy: 'first',
+        api_key_fallback_count: 2,
       };
 
       const result = ProviderSchema.safeParse(validProvider);
@@ -24,6 +26,8 @@ describe('Config Module', () => {
         api_url: 'https://api.example.com',
         request_structure: '{"prompt":"{input}"}',
         api_key_from_env: ['API_KEY'],
+        api_key_fallback_strategy: 'first',
+        api_key_fallback_count: 2,
       };
 
       const result = ProviderSchema.safeParse(minimalProvider);
@@ -31,6 +35,8 @@ describe('Config Module', () => {
       expect(result.data?.model).toBeUndefined();
       expect(result.data?.responsePath).toBeUndefined();
       expect(result.data?.order).toBeUndefined();
+      expect(result.data?.api_key_fallback_strategy).toBe('first');
+      expect(result.data?.api_key_fallback_count).toBe(2);
     });
 
     it('should reject invalid provider configurations', () => {
@@ -49,6 +55,8 @@ describe('Config Module', () => {
         api_url: 'https://api.example.com',
         request_structure: '{"prompt":"{input}"}',
         api_key_from_env: ['PRIMARY_KEY', 'SECONDARY_KEY', 'BACKUP_KEY'],
+        api_key_fallback_strategy: 'first',
+        api_key_fallback_count: 2,
       };
 
       const result = ProviderSchema.safeParse(providerWithMultipleKeys);
@@ -67,6 +75,8 @@ describe('Config Module', () => {
             request_structure: '{"model":"gpt-4","messages":[{"role":"user","content":"{input}"}]}',
             api_key_from_env: ['OPENAI_API_KEY'],
             responsePath: 'choices[0].message.content',
+            api_key_fallback_strategy: 'first' as const,
+            api_key_fallback_count: 2,
           },
         ],
         mode: 'synchronous' as const,
@@ -88,6 +98,8 @@ describe('Config Module', () => {
             api_url: 'https://api.example.com',
             request_structure: '{"prompt":"{input}"}',
             api_key_from_env: ['API_KEY'],
+            api_key_fallback_strategy: 'first' as const,
+            api_key_fallback_count: 2,
           },
         ],
       };
@@ -109,6 +121,8 @@ describe('Config Module', () => {
             api_url: 'https://api.example.com',
             request_structure: '{"prompt":"{input}"}',
             api_key_from_env: ['API_KEY'],
+            api_key_fallback_strategy: 'first' as const,
+            api_key_fallback_count: 2,
           },
         ],
         mode: 'invalid-mode',
@@ -126,6 +140,8 @@ describe('Config Module', () => {
             api_url: 'https://api.example.com',
             request_structure: '{"prompt":"{input}"}',
             api_key_from_env: ['API_KEY'],
+            api_key_fallback_strategy: 'first' as const,
+            api_key_fallback_count: 2,
           },
         ],
         cache: { enabled: false, ttl: 300000 },
@@ -146,6 +162,8 @@ describe('Config Module', () => {
             api_url: 'https://api.example.com',
             request_structure: '{"prompt":"{input}"}',
             api_key_from_env: ['API_KEY'],
+            api_key_fallback_strategy: 'first' as const,
+            api_key_fallback_count: 2,
           },
         ],
         mode: 'concurrent' as const,
@@ -176,6 +194,8 @@ describe('Config Module', () => {
             api_url: 'https://api.example.com',
             request_structure: '{"input":"{input}"}',
             api_key_from_env: ['KEY'],
+            api_key_fallback_strategy: 'first' as const,
+            api_key_fallback_count: 2,
           },
         ],
       };

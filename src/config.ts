@@ -8,6 +8,13 @@ export const ProviderSchema = z.object({
   api_key_from_env: z.array(z.string()),
   responsePath: z.string().optional(),
   order: z.number().optional(),
+  api_key_fallback_strategy: z.enum(['first', 'all', 'count', 'indices', 'range', 'subset']).default('first'),
+  api_key_fallback_count: z.number().default(2),
+  api_key_fallback_indices: z.array(z.number()).optional(),
+  api_key_fallback_range_start: z.number().optional(),
+  api_key_fallback_range_end: z.number().optional(),
+  api_key_fallback_subset_count: z.number().optional(),
+  api_key_fallback_subset_from: z.number().optional(),
 });
 
 export const ConfigSchema = z.object({
@@ -19,8 +26,6 @@ export const ConfigSchema = z.object({
   cache: z
     .object({ enabled: z.boolean(), ttl: z.number() })
     .default({ enabled: true, ttl: 600000 }),
-  api_key_fallback_strategy: z.enum(['all', 'first', 'count']).default('all'),
-  api_key_fallback_count: z.number().default(2),
 });
 
 export type Provider = z.infer<typeof ProviderSchema>;
