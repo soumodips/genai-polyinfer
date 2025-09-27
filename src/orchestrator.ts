@@ -92,56 +92,130 @@ export class Orchestrator {
   }
 
   private async tryProvider(input: string, provider: Provider): Promise<Result> {
-    const { logging, metrics } = this.config;
+    const { logging, metrics, api_key_fallback_strategy, api_key_fallback_count } = this.config;
 
     if (logging) log(`Trying provider: ${provider.name}`);
 
-    // Build API key
-    let apiKey = '';
+    // Collect all available API keys
+    const availableApiKeys: string[] = [];
     for (const envVar of provider.api_key_from_env) {
       const val = process.env[envVar];
       if (val) {
-        apiKey = val;
-        break;
+        availableApiKeys.push(val);
       }
     }
-    if (!apiKey) {
-      if (logging) log(`No API key found for ${provider.name}`);
+
+    // If API keys are available, try with them first using existing logic
+    if (availableApiKeys.length > 0) {
+      // Determine how many keys to try based on strategy
+      let keysToTry: string[];
+      switch (api_key_fallback_strategy) {
+        case 'first':
+          keysToTry = availableApiKeys.slice(0, 1);
+          break;
+        case 'count':
+          keysToTry = availableApiKeys.slice(0, api_key_fallback_count);
+          break;
+        case 'all':
+        default:
+          keysToTry = availableApiKeys;
+          break;
+      }
+
+      if (logging && api_key_fallback_strategy !== 'all') {
+        log(`API key fallback strategy: ${api_key_fallback_strategy}, trying ${keysToTry.length} of ${availableApiKeys.length} keys`);
+      }
+
+      // Try each API key until one succeeds
+      for (let i = 0; i < keysToTry.length; i++) {
+        const apiKey = keysToTry[i];
+        const keyNumber = availableApiKeys.indexOf(apiKey) + 1;
+        const totalKeys = api_key_fallback_strategy === 'all' ? availableApiKeys.length : keysToTry.length;
+
+        if (logging) log(`Trying API key ${keyNumber}/${totalKeys} for ${provider.name}`);
+
+        try {
+          const result = await this.tryRequest(input, provider, apiKey);
+          if (logging) log(`Success from ${provider.name} with key ${keyNumber}`);
+          return result;
+        } catch (error) {
+          if (logging) log(`Provider ${provider.name} failed with key ${keyNumber}:`, error);
+          // Try next API key
+          continue;
+        }
+      }
+
+      // All configured API keys failed
+      const strategyInfo = api_key_fallback_strategy === 'all'
+        ? `All ${availableApiKeys.length} API keys failed`
+        : `${keysToTry.length} of ${availableApiKeys.length} API keys failed (strategy: ${api_key_fallback_strategy})`;
+
+      if (logging) log(`${strategyInfo} for ${provider.name}`);
+      if (metrics) recordFailure(provider.name, 0);
+      throw new Error(`${strategyInfo} for ${provider.name}`);
+    }
+
+    // No API keys available - try without API key (local model support)
+    if (logging) log(`No API keys available, attempting ${provider.name} without API key (local model support)`);
+    try {
+      const result = await this.tryRequest(input, provider, null);
+      if (logging) log(`Success from ${provider.name} without API key`);
+      return result;
+    } catch (error) {
+      if (logging) log(`No api key but required for ${provider.name}`);
       if (metrics) recordFailure(provider.name, 0);
       throw new Error(`No API key for ${provider.name}`);
     }
+  }
+
+  private async tryRequest(input: string, provider: Provider, apiKey: string | null): Promise<Result> {
+    const { logging, metrics } = this.config;
 
     const bodyStr = buildBody(provider, input);
     const headers: Record<string, string> = {
       'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
     };
 
+    // Only add authorization header if API key is provided
+    if (apiKey) {
+      headers.authorization = `Bearer ${apiKey}`;
+    }
+
     const start = Date.now();
-    const res = await httpRequest(provider.api_url, {
-      method: 'POST',
-      headers,
-      body: bodyStr,
-    });
-    const latency = Date.now() - start;
+    try {
+      const res = await httpRequest(provider.api_url, {
+        method: 'POST',
+        headers,
+        body: bodyStr,
+      });
+      const latency = Date.now() - start;
 
-    if (!res.ok) {
-      if (logging) log(`Provider ${provider.name} failed: ${res.status}`);
-      if (metrics) recordFailure(provider.name, latency);
-      throw new Error(`HTTP error for ${provider.name}: ${res.status}`);
+      if (!res.ok) {
+        if (logging) {
+          const keyInfo = apiKey ? `with API key` : `without API key`;
+          log(`Provider ${provider.name} failed ${keyInfo}: ${res.status}`);
+        }
+        if (metrics) recordFailure(provider.name, latency);
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const extracted = extractText(res.body, provider.responsePath);
+      if (!extracted) {
+        if (logging) {
+          const keyInfo = apiKey ? `with API key` : `without API key`;
+          log(`No text extracted from ${provider.name} ${keyInfo}`);
+        }
+        if (metrics) recordFailure(provider.name, latency);
+        throw new Error('No text extracted from response');
+      }
+
+      if (metrics) recordSuccess(provider.name, latency);
+
+      return { raw_response: res.body, text: extracted };
+    } catch (error) {
+      if (metrics) recordFailure(provider.name, Date.now() - start);
+      throw error;
     }
-
-    const extracted = extractText(res.body, provider.responsePath);
-    if (!extracted) {
-      if (logging) log(`No text extracted from ${provider.name}`);
-      if (metrics) recordFailure(provider.name, latency);
-      throw new Error(`No text extracted for ${provider.name}`);
-    }
-
-    if (logging) log(`Success from ${provider.name}`);
-    if (metrics) recordSuccess(provider.name, latency);
-
-    return { raw_response: res.body, text: extracted };
   }
 }
 
