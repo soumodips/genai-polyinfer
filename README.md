@@ -55,9 +55,27 @@ export default {
         model: '{model}',
         messages: [{ role: 'user', content: '{input}' }],
       }),
+      request_header: {
+        'authorization': 'Bearer {api_key}',
+      },
       api_key_from_env: ['OPENAI_API_KEY'], // Can specify multiple keys for fallback
       // Example with multiple keys: ['OPENAI_API_KEY', 'OPENAI_API_KEY_BACKUP']
       responsePath: 'choices[0].message.content',
+    },
+    {
+      name: 'anthropic',
+      api_url: 'https://api.anthropic.com/v1/messages',
+      model: 'claude-3-haiku-20240307',
+      request_structure: JSON.stringify({
+        model: '{model}',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: '{input}' }],
+      }),
+      request_header: {
+        'x-api-key': '{api_key}',
+      },
+      api_key_from_env: ['ANTHROPIC_API_KEY'],
+      responsePath: 'content[0].text',
     },
     {
       name: 'ollama',
@@ -119,6 +137,7 @@ The config supports:
 - **metrics**: Track success/failure rates
 - **cache**: In-memory caching with TTL
 - **Note**: API key fallback strategies are now configured per-provider (see Provider Configuration below)
+- **Provider Order**: The order of tries follows the order of entries in the providers array in polyinfer.config.ts
 
 ### Provider Configuration
 
@@ -128,6 +147,7 @@ Each provider supports:
 - **api_url**: The HTTP endpoint for API requests
 - **model**: Model name to use (substituted in request_structure)
 - **request_structure**: JSON template for the request body
+- **request_header**: Optional object containing custom HTTP headers for the provider (e.g., `{'x-api-key': '{api_key}'}` or `{'authorization': 'Bearer {api_key}'}`)
 - **api_key_from_env**: Array of environment variable names containing API keys. Supports multiple keys with per-provider fallback strategies
 - **api_key_fallback_strategy**: How to handle multiple API keys for this provider - "first" (default, try first available key), "all" (try all until one succeeds), "count" (try specified number of keys), "indices" (try specific key indices), "range" (try keys in a range), or "subset" (try random subset)
 - **api_key_fallback_count**: When strategy is "count", specifies how many keys to try (default: 2)
@@ -137,6 +157,28 @@ Each provider supports:
 - **api_key_fallback_subset_count**: When strategy is "subset", number of random keys to try
 - **api_key_fallback_subset_from**: When strategy is "subset", try random keys from the first N available keys
 - **responsePath**: Path to extract text from the response (e.g., 'choices[0].message.content')
+
+## Provider Ordering
+
+The library processes providers in the exact order they appear in the `providers` array in `polyinfer.config.ts`. This ordering affects:
+
+- **Sequential Mode**: Providers are tried in array order until one succeeds
+- **Concurrent Mode**: All providers execute simultaneously, and fastest successful response is returned
+- **Consecutive Success Switching**: Provider switching follows the array sequence
+- **Best Practice**: Place your most reliable or preferred providers first in the array
+
+### Example Provider Ordering
+
+```typescript
+export default {
+  providers: [
+    { name: 'fast-provider', ... },    // Tried first (most preferred)
+    { name: 'reliable-provider', ... }, // Tried second
+    { name: 'backup-provider', ... },   // Tried third (fallback)
+  ],
+  // ...
+};
+```
 
 ## Local Model Support
 

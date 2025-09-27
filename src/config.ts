@@ -5,6 +5,7 @@ export const ProviderSchema = z.object({
   model: z.string().optional(),
   api_url: z.string(),
   request_structure: z.string(),
+  request_header: z.record(z.string()).optional(),
   api_key_from_env: z.array(z.string()),
   responsePath: z.string().optional(),
   order: z.number().optional(),
