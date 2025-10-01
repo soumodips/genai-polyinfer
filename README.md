@@ -342,6 +342,14 @@ This flexibility allows you to:
 - Distribute load across multiple keys using random subsets
 - Fine-tune fallback behavior for each provider's requirements
 
+## Sample Applications
+
+Explore example implementations across different frameworks:
+
+- [GenAI PolyInfer Sample Apps](https://github.com/soumodips/genai-polyinfer-sample-apps)
+
+This repository includes examples for Angular, React, Vue, and Node.js Express.
+
 ## Notes
 
 - No provider SDKs are used — only HTTP requests.
