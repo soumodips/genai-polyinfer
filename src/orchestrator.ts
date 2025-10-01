@@ -151,7 +151,10 @@ export class Orchestrator {
     // Collect all available API keys
     const availableApiKeys: string[] = [];
     for (const envVar of provider.api_key_from_env) {
-      const val = process.env[envVar];
+      // Handle both Node.js and browser environments
+      const val = (typeof window !== 'undefined' && import.meta)
+        ? (import.meta as any).env?.[envVar]
+        : process.env?.[envVar];
       if (val) {
         availableApiKeys.push(val);
       }
