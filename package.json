@@ -1,6 +1,6 @@
 {
   "name": "genai-polyinfer",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "description": "Provider-agnostic GenAI orchestrator (no provider SDKs) for browser & Node",
   "type": "module",
   "main": "dist/index.cjs.js",
