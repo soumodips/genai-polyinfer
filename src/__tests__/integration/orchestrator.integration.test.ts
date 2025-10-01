@@ -74,7 +74,7 @@ describe('Orchestrator Integration', () => {
         rawText: '{"choices":[{"message":{"content":"Hello from OpenAI!"}}]}'
       });
 
-      const result = await say('Hello world', testConfig);
+      const result = await say('Hello world', { config: testConfig });
 
       expect(result).toBeDefined();
       expect(result.text).toBe('Hello from OpenAI!');
@@ -107,11 +107,11 @@ describe('Orchestrator Integration', () => {
       });
 
       // First call
-      const result1 = await say('Cached message', testConfig);
+      const result1 = await say('Cached message', { config: testConfig });
       expect(result1.text).toBe('Hello from OpenAI!');
 
       // Second call should use cache
-      const result2 = await say('Cached message', testConfig);
+      const result2 = await say('Cached message', { config: testConfig });
       expect(result2.text).toBe('Hello from OpenAI!');
 
       // Should only have 1 HTTP call since second used cache
@@ -143,7 +143,7 @@ describe('Orchestrator Integration', () => {
         rawText: '{"content":[{"text":"Hello from Anthropic!"}]}'
       });
 
-      const result = await say('Hello world', testConfig);
+      const result = await say('Hello world', { config: testConfig });
 
       expect(result.text).toBe('Hello from Anthropic!');
 
@@ -167,7 +167,7 @@ describe('Orchestrator Integration', () => {
         rawText: '{"error":"Service unavailable"}'
       });
 
-      const result = await say('Hello world', testConfig);
+      const result = await say('Hello world', { config: testConfig });
 
       expect(result.raw_response).toBeNull();
       expect(result.text).toMatch(/^(Music is too loud|Say again|I'm sorry|Could you repeat|What|Pardon me)/);
@@ -191,7 +191,7 @@ describe('Orchestrator Integration', () => {
         rawText: '{"error":"Unauthorized"}'
       });
 
-      const result = await say('Hello world', testConfig);
+      const result = await say('Hello world', { config: testConfig });
 
       expect(result.raw_response).toBeNull();
       expect(result.text).toMatch(/^(Music is too loud|Say again|I'm sorry|Could you repeat|What|Pardon me)/);
@@ -206,7 +206,7 @@ describe('Orchestrator Integration', () => {
       // Reset global config with empty providers
       initConfig({ providers: [], mode: 'synchronous' });
 
-      const result = await say('Hello');
+      const result = await say('Hello', {});
 
       expect(result.raw_response).toBeNull();
       expect(result.text).toMatch(/^(Music is too loud|Say again|I'm sorry|Could you repeat|What|Pardon me)/);

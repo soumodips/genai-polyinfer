@@ -9,6 +9,7 @@ export const ProviderSchema = z.object({
   api_key_from_env: z.array(z.string()),
   responsePath: z.string().optional(),
   order: z.number().optional(),
+  intent: z.union([z.string(), z.array(z.string())]).optional(),
   api_key_fallback_strategy: z.enum(['first', 'all', 'count', 'indices', 'range', 'subset']).default('first'),
   api_key_fallback_count: z.number().default(2),
   api_key_fallback_indices: z.array(z.number()).optional(),
@@ -20,6 +21,7 @@ export const ProviderSchema = z.object({
 
 export const ConfigSchema = z.object({
   providers: z.array(ProviderSchema),
+  all_intents: z.array(z.string()).optional(),
   mode: z.enum(['synchronous', 'concurrent']).default('synchronous'),
   consecutive_success: z.number().default(5),
   logging: z.boolean().default(true),
@@ -57,5 +59,41 @@ export function getGlobalConfig(): Config | null {
  * @returns Validated and merged configuration
  */
 export function loadConfig(cfg: Partial<Config>): Config {
-  return ConfigSchema.parse(cfg as any);
+  const config = ConfigSchema.parse(cfg as any);
+
+  // Validate that all provider intents are in all_intents
+  if (config.all_intents) {
+    const allowedIntents = new Set(config.all_intents);
+    for (const provider of config.providers) {
+      if (provider.intent) {
+        const intents = Array.isArray(provider.intent) ? provider.intent : [provider.intent];
+        for (const intent of intents) {
+          if (!allowedIntents.has(intent)) {
+            throw new Error(`Provider ${provider.name} has intent '${intent}' not in all_intents: ${config.all_intents.join(', ')}`);
+          }
+        }
+      }
+    }
+  }
+
+  return config;
+}
+
+/**
+ * Validates that the provided intent is in the config's all_intents.
+ * @param intent - Intent to validate
+ * @param config - Configuration object
+ * @throws Error if intent is not allowed
+ */
+export function validateIntent(intent: string | string[] | undefined, config: Config): void {
+  if (!intent || !config.all_intents) return;
+
+  const intents = Array.isArray(intent) ? intent : [intent];
+  const allowedIntents = new Set(config.all_intents);
+
+  for (const i of intents) {
+    if (!allowedIntents.has(i)) {
+      throw new Error(`Intent '${i}' not in all_intents: ${config.all_intents.join(', ')}`);
+    }
+  }
 }

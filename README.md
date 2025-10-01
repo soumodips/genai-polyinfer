@@ -1,6 +1,6 @@
 # genai-polyinfer
 
-genai-polyinfer is a TypeScript library for orchestrating multiple GenAI providers via HTTP requests (no provider SDKs). It tries providers sequentially or concurrently, caches responses, tracks metrics, and logs operations. **Configurable API key fallback** - when multiple API keys are configured, you can control whether to try all keys, just the first key, or a specified number of keys. **Local model support** - when no API keys are configured, it automatically attempts requests without authentication for local model servers.
+genai-polyinfer is a TypeScript library for orchestrating multiple GenAI providers via HTTP requests (no provider SDKs). It tries providers sequentially or concurrently, caches responses, tracks metrics, and logs operations. **Intent-based provider selection** - filter and prioritize providers based on use case intents. **Configurable API key fallback** - when multiple API keys are configured, you can control whether to try all keys, just the first key, or a specified number of keys. **Local model support** - when no API keys are configured, it automatically attempts requests without authentication for local model servers.
 
 ## Install
 
@@ -33,7 +33,7 @@ import { say } from 'genai-polyinfer';
 import cfg from './polyinfer.config';
 
 (async () => {
-  const result = await say("Explain recursion like I'm 5", cfg);
+  const result = await say("Explain recursion like I'm 5", { config: cfg });
   console.log(result.text);
 })();
 ```
@@ -46,6 +46,7 @@ Create `polyinfer.config.ts` in your project root:
 import 'dotenv/config';
 
 export default {
+  all_intents: ['chat', 'code', 'summary', 'creative', 'analysis'],
   providers: [
     {
       name: 'openai',
@@ -60,6 +61,7 @@ export default {
       },
       api_key_from_env: ['OPENAI_API_KEY'], // Can specify multiple keys for fallback
       // Example with multiple keys: ['OPENAI_API_KEY', 'OPENAI_API_KEY_BACKUP']
+      intent: ['chat', 'code', 'summary'],
       responsePath: 'choices[0].message.content',
     },
     {
@@ -75,6 +77,7 @@ export default {
         'x-api-key': '{api_key}',
       },
       api_key_from_env: ['ANTHROPIC_API_KEY'],
+      intent: ['chat', 'analysis'],
       responsePath: 'content[0].text',
     },
     {
@@ -83,6 +86,7 @@ export default {
       model: 'llama2',
       request_structure: JSON.stringify({ model: '{model}', prompt: '{input}' }),
       api_key_from_env: [], // No key for local
+      intent: 'chat',
       responsePath: 'response',
     },
   ],
@@ -100,14 +104,15 @@ export default {
 
 Initializes the global config. Call this once at app startup.
 
-### `say(input: string, config?: Partial<Config>): Promise<Result>`
+### `say(input: string, options?: { config?: Partial<Config>; intent?: string | string[] }): Promise<Result>`
 
 Orchestrates requests to configured providers.
 
 **Parameters:**
 
 - `input`: The text prompt
-- `config`: Optional partial config (merged with defaults). If not provided, uses global config from `initConfig()`.
+- `options.config`: Optional partial config (merged with defaults). If not provided, uses global config from `initConfig()`.
+- `options.intent`: Optional intent(s) to filter providers. If provided, only providers matching the intent(s) are used, prioritized by match count.
 
 **Returns:**
 
@@ -130,7 +135,8 @@ Clears the in-memory cache.
 
 The config supports:
 
-- **providers**: Array of provider objects with name, api_url, request_structure, api_key_from_env, responsePath
+- **all_intents**: Array of allowed intent strings for validation
+- **providers**: Array of provider objects with name, api_url, request_structure, api_key_from_env, responsePath, intent
 - **mode**: "synchronous" or "concurrent"
 - **consecutive_success**: Number of successes before switching providers
 - **logging**: Enable console logging
@@ -149,6 +155,7 @@ Each provider supports:
 - **request_structure**: JSON template for the request body
 - **request_header**: Optional object containing custom HTTP headers for the provider (e.g., `{'x-api-key': '{api_key}'}` or `{'authorization': 'Bearer {api_key}'}`)
 - **api_key_from_env**: Array of environment variable names containing API keys. Supports multiple keys with per-provider fallback strategies
+- **intent**: Optional string or array of strings specifying use case intents this provider supports (must be subset of config's all_intents)
 - **api_key_fallback_strategy**: How to handle multiple API keys for this provider - "first" (default, try first available key), "all" (try all until one succeeds), "count" (try specified number of keys), "indices" (try specific key indices), "range" (try keys in a range), or "subset" (try random subset)
 - **api_key_fallback_count**: When strategy is "count", specifies how many keys to try (default: 2)
 - **api_key_fallback_indices**: When strategy is "indices", array of key indices to try (e.g., [0, 2, 4] for 1st, 3rd, 5th keys)
@@ -179,6 +186,62 @@ export default {
   // ...
 };
 ```
+
+## Intent-Based Provider Selection
+
+You can filter and prioritize providers based on use case intents. Define allowed intents in `all_intents` and assign intents to each provider. When calling `say()`, specify the intent to only use matching providers.
+
+### How It Works
+
+1. **Intent Matching**: Providers are filtered to those whose `intent` field contains the requested intent(s)
+2. **Prioritization**: Providers are sorted by the number of matching intents (descending), then by original order
+3. **Fallback**: If no providers match the intent, all providers are used as fallback
+
+### Example Usage
+
+```ts
+// Use only providers that support 'code' intent
+const result = await say("Write a function", { intent: 'code' });
+
+// Use providers that support 'chat' or 'summary'
+const result = await say("Summarize this text", { intent: ['chat', 'summary'] });
+
+// Combine with config
+const result = await say("Hello", { config: myConfig, intent: 'chat' });
+```
+
+### Intent Configuration
+
+```ts
+export default {
+  all_intents: ['chat', 'code', 'summary', 'creative', 'analysis'],
+  providers: [
+    {
+      name: 'openai',
+      intent: ['chat', 'code', 'summary'], // Supports multiple intents
+      // ... other config
+    },
+    {
+      name: 'anthropic',
+      intent: 'analysis', // Single intent
+      // ... other config
+    },
+    {
+      name: 'ollama',
+      intent: ['chat'], // Array with one intent
+      // ... other config
+    },
+  ],
+  // ... other config
+};
+```
+
+### Benefits
+
+- **Specialization**: Use the best provider for specific use cases
+- **Cost Optimization**: Route simple tasks to cheaper providers
+- **Performance**: Prioritize faster providers for certain intents
+- **Fallback Safety**: Automatically falls back to all providers if needed
 
 ## Local Model Support
 
