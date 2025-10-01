@@ -35,6 +35,7 @@ import { buildBody, extractText } from '../providers/templateAdapter';
 
 describe('Orchestrator', () => {
   const mockConfig = {
+    all_intents: ['chat', 'code'],
     providers: [
       {
         name: 'test-provider',
@@ -42,6 +43,9 @@ describe('Orchestrator', () => {
         request_structure: '{"prompt": "{input}"}',
         api_key_from_env: ['TEST_KEY'],
         responsePath: 'response',
+        intent: 'chat',
+        api_key_fallback_strategy: 'first' as const,
+        api_key_fallback_count: 2,
       },
     ],
     mode: 'synchronous' as const,
@@ -130,6 +134,93 @@ describe('Orchestrator', () => {
 
       const result = await say('test');
       expect(result.text).toMatch(/Music is too loud|Say again|I'm sorry|Could you repeat|Pardon me/);
+    });
+
+    it('should filter providers by intent', async () => {
+      const configWithIntents = {
+        all_intents: ['chat', 'code'],
+        providers: [
+          {
+            name: 'chat-provider',
+            api_url: 'https://api.chat.com',
+            request_structure: '{"prompt": "{input}"}',
+            api_key_from_env: [],
+            responsePath: 'response',
+            intent: 'chat',
+            api_key_fallback_strategy: 'first' as const,
+            api_key_fallback_count: 2,
+          },
+          {
+            name: 'code-provider',
+            api_url: 'https://api.code.com',
+            request_structure: '{"prompt": "{input}"}',
+            api_key_from_env: [],
+            responsePath: 'response',
+            intent: 'code',
+            api_key_fallback_strategy: 'first' as const,
+            api_key_fallback_count: 2,
+          },
+        ],
+        mode: 'synchronous' as const,
+        consecutive_success: 5,
+        logging: false,
+        metrics: false,
+        cache: { enabled: false, ttl: 1000 },
+      };
+
+      vi.mocked(httpRequest).mockResolvedValue({ ok: true, status: 200, body: { response: 'chat response' }, rawText: '{}' });
+      vi.mocked(buildBody).mockReturnValue('body');
+      vi.mocked(extractText).mockReturnValue('chat response');
+
+      const result = await say('test', { config: configWithIntents, intent: 'chat' });
+
+      expect(result.text).toBe('chat response');
+      expect(httpRequest).toHaveBeenCalledWith('https://api.chat.com', expect.any(Object));
+    });
+
+    it('should fall back to all providers if no intent matches', async () => {
+      const configWithIntents = {
+        all_intents: ['chat', 'code'],
+        providers: [
+          {
+            name: 'chat-provider',
+            api_url: 'https://api.chat.com',
+            request_structure: '{"prompt": "{input}"}',
+            api_key_from_env: [],
+            responsePath: 'response',
+            intent: 'chat',
+            api_key_fallback_strategy: 'first' as const,
+            api_key_fallback_count: 2,
+          },
+        ],
+        mode: 'synchronous' as const,
+        consecutive_success: 5,
+        logging: false,
+        metrics: false,
+        cache: { enabled: false, ttl: 1000 },
+      };
+
+      vi.mocked(httpRequest).mockResolvedValue({ ok: true, status: 200, body: { response: 'chat response' }, rawText: '{}' });
+      vi.mocked(buildBody).mockReturnValue('body');
+      vi.mocked(extractText).mockReturnValue('chat response');
+
+      const result = await say('test', { config: configWithIntents, intent: 'code' });
+
+      expect(result.text).toBe('chat response');
+    });
+
+    it('should throw error for invalid intent', async () => {
+      const configWithIntents = {
+        all_intents: ['chat', 'code'],
+        providers: [],
+        mode: 'synchronous' as const,
+        consecutive_success: 5,
+        logging: false,
+        metrics: false,
+        cache: { enabled: false, ttl: 1000 },
+      };
+
+      await expect(say('test', { config: configWithIntents, intent: 'invalid' })).rejects.toThrow('Intent \'invalid\' not in all_intents');
     });
   });
 });

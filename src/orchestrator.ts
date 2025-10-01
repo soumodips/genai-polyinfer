@@ -1,4 +1,4 @@
-import { Config, Provider, loadConfig, getGlobalConfig } from './config';
+import { Config, Provider, loadConfig, getGlobalConfig, validateIntent } from './config';
 import { httpRequest } from './http';
 import { makeKey, getCache, setCache } from './cache';
 import { log } from './logger';
@@ -20,10 +20,51 @@ export interface Result {
 
 export class Orchestrator {
   private config: Config;
+  private intent: string | string[] | undefined;
   private consecutiveCounts: Record<string, number> = {};
 
-  constructor(config: Partial<Config>) {
+  constructor(config: Partial<Config>, intent?: string | string[]) {
     this.config = loadConfig(config);
+    this.intent = intent;
+    if (intent) {
+      validateIntent(intent, this.config);
+    }
+  }
+
+  private getFilteredProviders(): Provider[] {
+    const { providers } = this.config;
+    if (!this.intent) {
+      return providers;
+    }
+
+    const intentArray = Array.isArray(this.intent) ? this.intent : [this.intent];
+
+    // Calculate match scores for each provider
+    const providersWithScores = providers.map(provider => {
+      let matchCount = 0;
+      if (provider.intent) {
+        const providerIntents = Array.isArray(provider.intent) ? provider.intent : [provider.intent];
+        for (const intent of intentArray) {
+          if (providerIntents.includes(intent)) {
+            matchCount++;
+          }
+        }
+      }
+      return { provider, matchCount };
+    });
+
+    // Sort by matchCount descending, then by original order
+    providersWithScores.sort((a, b) => {
+      if (a.matchCount !== b.matchCount) {
+        return b.matchCount - a.matchCount;
+      }
+      return providers.indexOf(a.provider) - providers.indexOf(b.provider);
+    });
+
+    const filtered = providersWithScores.filter(p => p.matchCount > 0).map(p => p.provider);
+
+    // If no providers match, fall back to all providers
+    return filtered.length > 0 ? filtered : providers;
   }
 
   public async say(input: string): Promise<Result> {
@@ -46,7 +87,8 @@ export class Orchestrator {
   }
 
   private async runSequential(input: string): Promise<Result> {
-    const { providers, consecutive_success, logging, cache } = this.config;
+    const providers = this.getFilteredProviders();
+    const { consecutive_success, logging, cache } = this.config;
 
     for (const provider of providers) {
       try {
@@ -75,7 +117,8 @@ export class Orchestrator {
   }
 
   private async runConcurrent(input: string): Promise<Result> {
-    const { providers, cache } = this.config;
+    const providers = this.getFilteredProviders();
+    const { cache } = this.config;
     const promises = providers.map((p: Provider) => this.tryProvider(input, p));
     try {
       const result = await Promise.any(promises);
@@ -278,11 +321,14 @@ export class Orchestrator {
  * Orchestrates a request to configured AI providers.
  * If no config is provided, uses the global config initialized with initConfig().
  * @param input - The text prompt to send to AI providers
- * @param config - Optional configuration. If not provided, uses global config
+ * @param options - Optional configuration and intent. If not provided, uses global config
  * @returns Promise resolving to the result from the first successful provider
  * @throws Error if no config is available
  */
-export async function say(input: string, config?: Partial<Config>): Promise<Result> {
+export async function say(input: string, options?: { config?: Partial<Config>; intent?: string | string[] }): Promise<Result> {
+  let config = options?.config;
+  const intent = options?.intent;
+
   if (!config) {
     const globalCfg = getGlobalConfig();
     if (!globalCfg) {
@@ -292,6 +338,6 @@ export async function say(input: string, config?: Partial<Config>): Promise<Resu
     }
     config = globalCfg;
   }
-  const orchestrator = new Orchestrator(config);
+  const orchestrator = new Orchestrator(config, intent);
   return orchestrator.say(input);
 }
